@@ -1,0 +1,7 @@
+{
+  "name": "SolarTech AI Monitor",
+  "description": "Advanced solar panel monitoring dashboard with AI fault detection, IoT integration, and predictive analytics.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
