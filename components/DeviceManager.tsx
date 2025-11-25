@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { MapPin, Server, WifiOff, AlertTriangle, CheckCircle2, Wrench, ChevronDown, ChevronUp, LayoutGrid, Zap, Download, Layers, Activity, Thermometer } from 'lucide-react';
+import { MapPin, Server, WifiOff, AlertTriangle, CheckCircle2, Wrench, ChevronDown, ChevronUp, LayoutGrid, Zap, Download, Layers, Activity, Thermometer, ScanEye } from 'lucide-react';
 import { BarChart, Bar, ResponsiveContainer, Tooltip } from 'recharts';
 import { ESP32Device, DeviceStatus, PanelData } from '../types';
 
@@ -478,6 +478,21 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ devices }) => {
                                                   ) : (
                                                     <div className="h-16 flex items-center justify-center text-[10px] text-slate-300 border-t border-slate-100 dark:border-slate-600">
                                                       No history
+                                                    </div>
+                                                  )}
+
+                                                  {/* Recent AI Faults Indicator */}
+                                                  {panel.recentFaults && panel.recentFaults.length > 0 && (
+                                                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-600">
+                                                      <div className="flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
+                                                        <ScanEye size={12} />
+                                                        <span>AI Fault Detected</span>
+                                                      </div>
+                                                      {panel.recentFaults.map((fault, i) => (
+                                                        <div key={i} className="bg-amber-50 dark:bg-amber-900/20 p-1.5 rounded text-[10px] text-amber-800 dark:text-amber-200 mb-1 last:mb-0 leading-tight">
+                                                          <span className="font-bold capitalize">{fault.type.replace('-', ' ')}</span> ({fault.confidence}%): {fault.recommendation}
+                                                        </div>
+                                                      ))}
                                                     </div>
                                                   )}
                                                 </div>

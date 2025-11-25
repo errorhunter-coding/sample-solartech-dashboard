@@ -8,163 +8,47 @@ import Chatbot from './components/Chatbot';
 import MaintenancePlanner from './components/MaintenancePlanner';
 import Settings from './components/Settings';
 import Onboarding from './components/Onboarding';
-import { ViewState, ESP32Device, DeviceStatus, Technician, AppSettings, MaintenanceTask, TaskPriority } from './types';
+import { ViewState, ESP32Device, Technician, AppSettings, MaintenanceTask, TaskPriority } from './types';
 import { Menu, Bell } from 'lucide-react';
+import { StorageService } from './services/persistence';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.Dashboard);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isOnboardingActive, setIsOnboardingActive] = useState(true);
   
-  // Global App Settings
-  const [settings, setSettings] = useState<AppSettings>({
-    language: 'English (US)',
-    darkMode: false,
-    notifications: {
-      email: true,
-      push: true,
-      critical: true,
-      weeklyReport: false
-    }
-  });
+  // Initialize State from Persistence Layer (Mock Backend)
+  const [settings, setSettings] = useState<AppSettings>(StorageService.getSettings());
+  const [devices, setDevices] = useState<ESP32Device[]>(StorageService.getDevices());
+  const [technicians, setTechnicians] = useState<Technician[]>(StorageService.getTechnicians());
+  const [tasks, setTasks] = useState<MaintenanceTask[]>(StorageService.getTasks());
 
-  // Handle Dark Mode Side Effect
+  // Persistence Effects (Auto-save to "Backend")
   useEffect(() => {
+    StorageService.saveSettings(settings);
+    // Apply Dark Mode Side Effect
     if (settings.darkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [settings.darkMode]);
-  
-  // Mock History Data Helpers
-  const mockHistoryNormal = [
-    { time: '10:00', power: 45 }, { time: '10:15', power: 48 }, { time: '10:30', power: 50 }, { time: '10:45', power: 52 }, { time: '11:00', power: 53 }
-  ];
-  const mockHistoryLow = [
-    { time: '10:00', power: 30 }, { time: '10:15', power: 28 }, { time: '10:30', power: 25 }, { time: '10:45', power: 20 }, { time: '11:00', power: 18 }
-  ];
-  const mockHistoryOffline = [
-    { time: '10:00', power: 0 }, { time: '10:15', power: 0 }, { time: '10:30', power: 0 }, { time: '10:45', power: 0 }, { time: '11:00', power: 0 }
-  ];
+  }, [settings]);
 
-  // State for devices to be shared across Dashboard and DeviceManager
-  const [devices, setDevices] = useState<ESP32Device[]>([
-    { 
-      id: 'esp32-001', 
-      name: 'Panel Array A1', 
-      location: 'San Francisco, CA', 
-      status: DeviceStatus.Online, 
-      voltage: 24.2, 
-      current: 8.5, 
-      power: 205, 
-      temperature: 42, 
-      lastUpdated: new Date(), 
-      group: 'Main Roof',
-      panels: [
-        { id: 'P1', group: 'String A', power: 52, efficiency: 98, status: 'Normal', history: mockHistoryNormal },
-        { id: 'P2', group: 'String A', power: 51, efficiency: 97, status: 'Normal', history: mockHistoryNormal.map(h => ({...h, power: h.power - 1})) },
-        { id: 'P3', group: 'String B', power: 50, efficiency: 96, status: 'Normal', history: mockHistoryNormal.map(h => ({...h, power: h.power - 2})) },
-        { id: 'P4', group: 'String B', power: 52, efficiency: 99, status: 'Normal', history: mockHistoryNormal }
-      ]
-    },
-    { 
-      id: 'esp32-002', 
-      name: 'Panel Array A2', 
-      location: 'San Francisco, CA', 
-      status: DeviceStatus.Online, 
-      voltage: 24.1, 
-      current: 8.2, 
-      power: 198, 
-      temperature: 43, 
-      lastUpdated: new Date(), 
-      group: 'Main Roof',
-      panels: [
-        { id: 'P1', group: 'String A', power: 49, efficiency: 94, status: 'Normal', history: mockHistoryNormal.map(h => ({...h, power: h.power - 3})) },
-        { id: 'P2', group: 'String A', power: 50, efficiency: 95, status: 'Normal', history: mockHistoryNormal.map(h => ({...h, power: h.power - 2})) },
-        { id: 'P3', group: 'String A', power: 49, efficiency: 94, status: 'Normal', history: mockHistoryNormal.map(h => ({...h, power: h.power - 3})) },
-        { id: 'P4', group: 'String A', power: 50, efficiency: 95, status: 'Normal', history: mockHistoryNormal.map(h => ({...h, power: h.power - 2})) }
-      ]
-    },
-    { 
-      id: 'esp32-003', 
-      name: 'Panel Array B1', 
-      location: 'London, UK', 
-      status: DeviceStatus.Warning, 
-      voltage: 22.5, 
-      current: 6.1, 
-      power: 137, 
-      temperature: 55, 
-      lastUpdated: new Date(), 
-      group: 'Garden',
-      panels: [
-        { id: 'P1', group: 'West String', power: 45, efficiency: 85, status: 'Low Efficiency', history: mockHistoryLow },
-        { id: 'P2', group: 'West String', power: 30, efficiency: 60, status: 'Low Efficiency', history: mockHistoryLow.map(h => ({...h, power: h.power - 10})) },
-        { id: 'P3', group: 'East String', power: 48, efficiency: 92, status: 'Normal', history: mockHistoryNormal.map(h => ({...h, power: h.power - 4})) },
-        { id: 'P4', group: 'East String', power: 14, efficiency: 30, status: 'Low Efficiency', history: mockHistoryLow.map(h => ({...h, power: h.power - 20})) }
-      ]
-    },
-    { 
-      id: 'esp32-004', 
-      name: 'Panel Array B2', 
-      location: 'London, UK', 
-      status: DeviceStatus.Offline, 
-      voltage: 0, 
-      current: 0, 
-      power: 0, 
-      temperature: 20, 
-      lastUpdated: new Date(), 
-      group: 'Garden',
-      panels: [
-        { id: 'P1', group: 'String 1', power: 0, efficiency: 0, status: 'Offline', history: mockHistoryOffline },
-        { id: 'P2', group: 'String 1', power: 0, efficiency: 0, status: 'Offline', history: mockHistoryOffline },
-        { id: 'P3', group: 'String 1', power: 0, efficiency: 0, status: 'Offline', history: mockHistoryOffline },
-        { id: 'P4', group: 'String 1', power: 0, efficiency: 0, status: 'Offline', history: mockHistoryOffline }
-      ]
-    },
-  ]);
+  useEffect(() => {
+    StorageService.saveDevices(devices);
+  }, [devices]);
+
+  useEffect(() => {
+    StorageService.saveTechnicians(technicians);
+  }, [technicians]);
+
+  useEffect(() => {
+    StorageService.saveTasks(tasks);
+  }, [tasks]);
 
   const updateDevice = (updatedDevice: ESP32Device) => {
     setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d));
   };
-
-  // Shared Technicians State
-  const [technicians, setTechnicians] = useState<Technician[]>([
-    { id: 't1', name: 'Sarah Jenkins', role: 'Senior Electrician', status: 'Available', initials: 'SJ' },
-    { id: 't2', name: 'Mike Ross', role: 'Panel Specialist', status: 'Busy', initials: 'MR' },
-    { id: 't3', name: 'Alex Thompson', role: 'Maintenance Tech', status: 'Available', initials: 'AT' },
-  ]);
-
-  // Shared Maintenance Tasks State
-  const [tasks, setTasks] = useState<MaintenanceTask[]>([
-    {
-      id: 'm1',
-      title: 'Quarterly Inverter Inspection',
-      location: 'Main Control Room',
-      priority: TaskPriority.Medium,
-      status: 'Pending',
-      date: '2025-03-25',
-      aiInsight: 'Scheduled preventative maintenance based on 3-month cycle.',
-      logs: [
-        { id: 'l1', timestamp: new Date('2025-03-20T09:00:00'), message: 'Task automatically generated by System.', author: 'System', type: 'system' }
-      ]
-    },
-    {
-      id: 'm2',
-      title: 'Clear Debris from East Array',
-      location: 'East Wing Roof',
-      priority: TaskPriority.Low,
-      status: 'Completed',
-      assignedTechId: 't3',
-      date: '2025-03-20',
-      aiInsight: 'Visual analysis detected 15% soiling coverage.',
-      logs: [
-        { id: 'l2', timestamp: new Date('2025-03-19T14:20:00'), message: 'Fault detected by drone surveillance.', author: 'System', type: 'system' },
-        { id: 'l3', timestamp: new Date('2025-03-20T10:15:00'), message: 'Assigned to Alex Thompson.', author: 'System', type: 'system' },
-        { id: 'l4', timestamp: new Date('2025-03-20T11:30:00'), message: 'Cleared branches and leaves. Efficiency restored.', author: 'Alex Thompson', type: 'user' }
-      ]
-    }
-  ]);
 
   // Calculate pending tasks for header notification
   const pendingTasks = tasks.filter(t => t.status === 'Pending');
@@ -179,16 +63,16 @@ const App: React.FC = () => {
       case ViewState.Devices:
         return <DeviceManager devices={devices} />;
       case ViewState.Analysis:
-        return <FaultDetector />;
+        return <FaultDetector devices={devices} />;
       case ViewState.Assistant:
         return <Chatbot />;
       case ViewState.Maintenance:
         return <MaintenancePlanner 
           devices={devices} 
           technicians={technicians} 
-          setTechnicians={setTechnicians}
-          tasks={tasks}
-          setTasks={setTasks}
+          setTechnicians={setTechnicians} 
+          tasks={tasks} 
+          setTasks={setTasks} 
         />;
       case ViewState.Settings:
         return <Settings 
@@ -197,6 +81,7 @@ const App: React.FC = () => {
           settings={settings}
           updateSettings={setSettings}
           tasks={tasks}
+          setTasks={setTasks}
           devices={devices}
           addDevice={(d) => setDevices([...devices, d])}
           updateDevice={updateDevice}
@@ -256,12 +141,7 @@ const App: React.FC = () => {
                     View
                  </span>
               </button>
-            ) : (
-              // Placeholder to keep alignment if you wanted consistent layout, but strictly following design:
-              // If no tasks, maybe just show the empty space or a clean status.
-              // The user previously asked to align notification. If empty, we don't show it.
-              null
-            )}
+            ) : null}
           </div>
         </header>
 

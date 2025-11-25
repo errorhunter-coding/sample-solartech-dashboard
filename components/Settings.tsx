@@ -32,9 +32,11 @@ import {
   Layers,
   Edit3,
   Zap,
-  WifiOff
+  WifiOff,
+  CalendarDays,
+  List
 } from 'lucide-react';
-import { Technician, AppSettings, MaintenanceTask, ESP32Device, DeviceStatus, PanelData } from '../types';
+import { Technician, AppSettings, MaintenanceTask, ESP32Device, DeviceStatus, PanelData, TaskPriority } from '../types';
 
 interface SettingsProps {
   technicians: Technician[];
@@ -42,12 +44,13 @@ interface SettingsProps {
   settings: AppSettings;
   updateSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   tasks: MaintenanceTask[];
+  setTasks: React.Dispatch<React.SetStateAction<MaintenanceTask[]>>;
   devices: ESP32Device[];
   addDevice: (device: ESP32Device) => void;
   updateDevice: (device: ESP32Device) => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ technicians, setTechnicians, settings, updateSettings, tasks, devices, addDevice, updateDevice }) => {
+const Settings: React.FC<SettingsProps> = ({ technicians, setTechnicians, settings, updateSettings, tasks, setTasks, devices, addDevice, updateDevice }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'team' | 'devices'>('general');
   const [isSaved, setIsSaved] = useState(false);
   
@@ -55,6 +58,21 @@ const Settings: React.FC<SettingsProps> = ({ technicians, setTechnicians, settin
   const [newTechName, setNewTechName] = useState('');
   const [newTechRole, setNewTechRole] = useState('Maintenance Tech');
   const [expandedTechId, setExpandedTechId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+
+  // Calendar Task Modal State
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [taskForm, setTaskForm] = useState<{
+    techId: string;
+    date: string;
+    title: string;
+    priority: TaskPriority;
+  }>({
+    techId: '',
+    date: '',
+    title: '',
+    priority: TaskPriority.Medium
+  });
 
   // --- Device Management State ---
   const [isRegModalOpen, setIsRegModalOpen] = useState(false);
@@ -146,6 +164,56 @@ const Settings: React.FC<SettingsProps> = ({ technicians, setTechnicians, settin
     // Since state is already lifted to App.tsx, it's "saved" locally.
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
+  };
+
+  // --- Calendar Logic ---
+  const getNextDays = (days = 7) => {
+    const dates = [];
+    const today = new Date();
+    // Start from today
+    for (let i = 0; i < days; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        dates.push(d);
+    }
+    return dates;
+  };
+  const calendarDays = getNextDays(7);
+
+  const handleOpenAddTask = (techId: string, date: string) => {
+    setTaskForm({
+      techId,
+      date,
+      title: '',
+      priority: TaskPriority.Medium
+    });
+    setIsTaskModalOpen(true);
+  };
+
+  const handleSubmitTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskForm.title.trim()) return;
+
+    const newTask: MaintenanceTask = {
+      id: `mt-cal-${Date.now()}`,
+      title: taskForm.title,
+      priority: taskForm.priority,
+      status: 'Assigned',
+      assignedTechId: taskForm.techId,
+      date: taskForm.date,
+      location: 'General Site',
+      aiInsight: 'Scheduled manually via Team Calendar',
+      logs: [{
+        id: `l-${Date.now()}`,
+        timestamp: new Date(),
+        message: 'Task assigned via Calendar View',
+        author: 'Admin',
+        type: 'user'
+      }]
+    };
+
+    setTasks(prev => [...prev, newTask]);
+    setIsTaskModalOpen(false);
   };
 
   // --- Device Actions ---
@@ -432,193 +500,339 @@ const Settings: React.FC<SettingsProps> = ({ technicians, setTechnicians, settin
 
           {/* Team Tab */}
           {activeTab === 'team' && (
-            <div className="space-y-8">
-              <div className="flex justify-between items-end">
+            <div className="space-y-8 animate-fade-in">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
                    <h3 className="text-lg font-bold text-slate-800 dark:text-white">Team Management</h3>
-                   <p className="text-sm text-slate-500 dark:text-slate-400">Manage authorized technicians, roles, and view assignments.</p>
+                   <p className="text-sm text-slate-500 dark:text-slate-400">Manage authorized technicians, roles, and assignments.</p>
                 </div>
-                <div className="text-xs font-medium bg-primary-50 dark:bg-slate-700 text-primary-700 dark:text-primary-400 px-3 py-1 rounded-full">
-                  {technicians.length} Active Users
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* List */}
-                <div className="lg:col-span-2 space-y-3">
-                   {technicians.map((tech) => {
-                     const assignedTasks = tasks.filter(t => t.assignedTechId === tech.id && t.status !== 'Completed');
-                     const completedTasks = tasks.filter(t => t.assignedTechId === tech.id && t.status === 'Completed');
-                     const isExpanded = expandedTechId === tech.id;
-
-                     return (
-                     <div key={tech.id} className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden group hover:border-primary-200 dark:hover:border-slate-600 transition-all">
-                        <div className="p-4 flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
-                              tech.status === 'Available' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
-                            }`}>
-                              {tech.initials}
-                            </div>
-                            <div>
-                              <h4 className="font-bold text-slate-800 dark:text-slate-200">{tech.name}</h4>
-                              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                 <select 
-                                   value={tech.role}
-                                   onChange={(e) => handleUpdateRole(tech.id, e.target.value)}
-                                   className="bg-transparent border-none p-0 font-medium text-xs focus:ring-0 cursor-pointer hover:text-primary-600"
-                                 >
-                                   <option>Maintenance Tech</option>
-                                   <option>Senior Electrician</option>
-                                   <option>Panel Specialist</option>
-                                   <option>Site Supervisor</option>
-                                   <option>Administrator</option>
-                                 </select>
-                                 <span>•</span>
-                                 <span className="font-mono">ID: {tech.id}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                             <select
-                               value={tech.status}
-                               onChange={(e) => handleUpdateStatus(tech.id, e.target.value as any)}
-                               className={`text-xs font-bold px-2 py-1 rounded-full border-none outline-none cursor-pointer ${
-                                 tech.status === 'Available' ? 'bg-emerald-50 text-emerald-600' : 
-                                 tech.status === 'Busy' ? 'bg-orange-50 text-orange-600' : 'bg-slate-100 text-slate-500'
-                               }`}
-                             >
-                               <option value="Available">Available</option>
-                               <option value="Busy">Busy</option>
-                               <option value="On Leave">On Leave</option>
-                             </select>
-                             
-                             <button 
-                               onClick={() => setExpandedTechId(isExpanded ? null : tech.id)}
-                               className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
-                             >
-                               {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                             </button>
-                             
-                             <button 
-                               onClick={() => handleRemoveTechnician(tech.id)}
-                               className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                               title="Remove User"
-                             >
-                               <Trash2 size={18} />
-                             </button>
-                          </div>
-                        </div>
-                        
-                        {/* Expanded Task View */}
-                        {isExpanded && (
-                          <div className="bg-slate-50 dark:bg-slate-700/30 border-t border-slate-100 dark:border-slate-700 p-4 space-y-6">
-                            
-                            {/* Active Assignments */}
-                            <div>
-                                <h5 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
-                                <Briefcase size={14} />
-                                Active Assignments ({assignedTasks.length})
-                                </h5>
-                                {assignedTasks.length > 0 ? (
-                                <div className="space-y-2">
-                                    {assignedTasks.map(task => (
-                                    <div key={task.id} className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-600 flex justify-between items-center">
-                                        <div>
-                                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
-                                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                                            <Calendar size={12} />
-                                            <span>Due: {task.date}</span>
-                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                            task.priority === 'High' || task.priority === 'Critical' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'
-                                            }`}>{task.priority}</span>
-                                        </div>
-                                        </div>
-                                        <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                                        {task.status}
-                                        </span>
-                                    </div>
-                                    ))}
-                                </div>
-                                ) : (
-                                <p className="text-sm text-slate-400 italic">No active tasks assigned.</p>
-                                )}
-                            </div>
-
-                            {/* Past Maintenance Logs (Completed) */}
-                            <div>
-                                <h5 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
-                                <Clock size={14} />
-                                Past Maintenance Logs ({completedTasks.length})
-                                </h5>
-                                {completedTasks.length > 0 ? (
-                                <div className="space-y-2">
-                                    {completedTasks.map(task => (
-                                    <div key={task.id} className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-600 flex justify-between items-center opacity-75">
-                                        <div>
-                                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{task.title}</p>
-                                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                                            <CheckCircle2 size={12} className="text-emerald-500"/>
-                                            <span>Completed: {task.date}</span>
-                                        </div>
-                                        </div>
-                                        <button className="text-xs text-slate-400 hover:text-primary-600 font-medium">View Logs</button>
-                                    </div>
-                                    ))}
-                                </div>
-                                ) : (
-                                <p className="text-sm text-slate-400 italic">No past maintenance records.</p>
-                                )}
-                            </div>
-                          </div>
-                        )}
-                     </div>
-                   )})}
-                </div>
-
-                {/* Add Form */}
-                <div>
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-xl border border-slate-100 dark:border-slate-700 sticky top-0">
-                    <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                      <Plus size={18} className="text-primary-500" />
-                      Add New Member
-                    </h4>
-                    <form onSubmit={handleAddTechnician} className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Full Name</label>
-                        <input 
-                          type="text"
-                          value={newTechName}
-                          onChange={(e) => setNewTechName(e.target.value)}
-                          placeholder="e.g. John Doe"
-                          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Role</label>
-                        <select
-                          value={newTechRole}
-                          onChange={(e) => setNewTechRole(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
-                        >
-                          <option>Maintenance Tech</option>
-                          <option>Senior Electrician</option>
-                          <option>Panel Specialist</option>
-                          <option>Site Supervisor</option>
-                          <option>Administrator</option>
-                        </select>
-                      </div>
-                      <button 
-                        type="submit"
-                        className="w-full bg-slate-900 hover:bg-black dark:bg-primary-600 dark:hover:bg-primary-700 text-white font-medium py-2.5 rounded-xl transition-colors shadow-lg shadow-slate-200 dark:shadow-none"
+                <div className="flex items-center gap-3">
+                  <div className="flex bg-slate-100 dark:bg-slate-700/50 rounded-lg p-1">
+                      <button
+                          onClick={() => setViewMode('list')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-md flex items-center gap-2 transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-600 text-primary-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
                       >
-                        Add Member
+                          <List size={14} /> List
                       </button>
-                    </form>
+                      <button
+                          onClick={() => setViewMode('calendar')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-md flex items-center gap-2 transition-all ${viewMode === 'calendar' ? 'bg-white dark:bg-slate-600 text-primary-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+                      >
+                          <CalendarDays size={14} /> Calendar
+                      </button>
+                  </div>
+                  <div className="text-xs font-medium bg-primary-50 dark:bg-slate-700 text-primary-700 dark:text-primary-400 px-3 py-1 rounded-full">
+                    {technicians.length} Active Users
                   </div>
                 </div>
               </div>
+
+              {viewMode === 'list' ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* List View */}
+                  <div className="lg:col-span-2 space-y-3">
+                    {technicians.map((tech) => {
+                      const assignedTasks = tasks.filter(t => t.assignedTechId === tech.id && t.status !== 'Completed');
+                      const completedTasks = tasks.filter(t => t.assignedTechId === tech.id && t.status === 'Completed');
+                      const isExpanded = expandedTechId === tech.id;
+
+                      return (
+                      <div key={tech.id} className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden group hover:border-primary-200 dark:hover:border-slate-600 transition-all">
+                          <div className="p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                                tech.status === 'Available' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
+                              }`}>
+                                {tech.initials}
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-slate-800 dark:text-slate-200">{tech.name}</h4>
+                                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                  <select 
+                                    value={tech.role}
+                                    onChange={(e) => handleUpdateRole(tech.id, e.target.value)}
+                                    className="bg-transparent border-none p-0 font-medium text-xs focus:ring-0 cursor-pointer hover:text-primary-600 dark:bg-slate-800"
+                                  >
+                                    <option>Maintenance Tech</option>
+                                    <option>Senior Electrician</option>
+                                    <option>Panel Specialist</option>
+                                    <option>Site Supervisor</option>
+                                    <option>Administrator</option>
+                                  </select>
+                                  <span>•</span>
+                                  <span className="font-mono">ID: {tech.id}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <select
+                                value={tech.status}
+                                onChange={(e) => handleUpdateStatus(tech.id, e.target.value as any)}
+                                className={`text-xs font-bold px-2 py-1 rounded-full border-none outline-none cursor-pointer ${
+                                  tech.status === 'Available' ? 'bg-emerald-50 text-emerald-600' : 
+                                  tech.status === 'Busy' ? 'bg-orange-50 text-orange-600' : 'bg-slate-100 text-slate-500'
+                                }`}
+                              >
+                                <option value="Available">Available</option>
+                                <option value="Busy">Busy</option>
+                                <option value="On Leave">On Leave</option>
+                              </select>
+                              
+                              <button 
+                                onClick={() => setExpandedTechId(isExpanded ? null : tech.id)}
+                                className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                              >
+                                {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                              </button>
+                              
+                              <button 
+                                onClick={() => handleRemoveTechnician(tech.id)}
+                                className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                title="Remove User"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          {/* Expanded Task View */}
+                          {isExpanded && (
+                            <div className="bg-slate-50 dark:bg-slate-700/30 border-t border-slate-100 dark:border-slate-700 p-4 space-y-6">
+                              
+                              {/* Active Assignments */}
+                              <div>
+                                  <h5 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
+                                  <Briefcase size={14} />
+                                  Active Assignments ({assignedTasks.length})
+                                  </h5>
+                                  {assignedTasks.length > 0 ? (
+                                  <div className="space-y-2">
+                                      {assignedTasks.map(task => (
+                                      <div key={task.id} className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-600 flex justify-between items-center">
+                                          <div>
+                                          <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
+                                          <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                                              <Calendar size={12} />
+                                              <span>Due: {task.date}</span>
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                              task.priority === 'High' || task.priority === 'Critical' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'
+                                              }`}>{task.priority}</span>
+                                          </div>
+                                          </div>
+                                          <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                                          {task.status}
+                                          </span>
+                                      </div>
+                                      ))}
+                                  </div>
+                                  ) : (
+                                  <p className="text-sm text-slate-400 italic">No active tasks assigned.</p>
+                                  )}
+                              </div>
+
+                              {/* Past Maintenance Logs (Completed) */}
+                              <div>
+                                  <h5 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
+                                  <Clock size={14} />
+                                  Past Maintenance Logs ({completedTasks.length})
+                                  </h5>
+                                  {completedTasks.length > 0 ? (
+                                  <div className="space-y-2">
+                                      {completedTasks.map(task => (
+                                      <div key={task.id} className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-600 flex justify-between items-center opacity-75">
+                                          <div>
+                                          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{task.title}</p>
+                                          <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                                              <CheckCircle2 size={12} className="text-emerald-500"/>
+                                              <span>Completed: {task.date}</span>
+                                          </div>
+                                          </div>
+                                          <button className="text-xs text-slate-400 hover:text-primary-600 font-medium">View Logs</button>
+                                      </div>
+                                      ))}
+                                  </div>
+                                  ) : (
+                                  <p className="text-sm text-slate-400 italic">No past maintenance records.</p>
+                                  )}
+                              </div>
+                            </div>
+                          )}
+                      </div>
+                    )})}
+                  </div>
+
+                  {/* Add Form */}
+                  <div>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-xl border border-slate-100 dark:border-slate-700 sticky top-0">
+                      <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                        <Plus size={18} className="text-primary-500" />
+                        Add New Member
+                      </h4>
+                      <form onSubmit={handleAddTechnician} className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Full Name</label>
+                          <input 
+                            type="text"
+                            value={newTechName}
+                            onChange={(e) => setNewTechName(e.target.value)}
+                            placeholder="e.g. John Doe"
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Role</label>
+                          <select
+                            value={newTechRole}
+                            onChange={(e) => setNewTechRole(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                          >
+                            <option>Maintenance Tech</option>
+                            <option>Senior Electrician</option>
+                            <option>Panel Specialist</option>
+                            <option>Site Supervisor</option>
+                            <option>Administrator</option>
+                          </select>
+                        </div>
+                        <button 
+                          type="submit"
+                          className="w-full bg-slate-900 hover:bg-black dark:bg-primary-600 dark:hover:bg-primary-700 text-white font-medium py-2.5 rounded-xl transition-colors shadow-lg shadow-slate-200 dark:shadow-none"
+                        >
+                          Add Member
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                // --- Calendar View ---
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden overflow-x-auto relative">
+                  <table className="w-full min-w-[900px]">
+                    <thead>
+                      <tr>
+                        <th className="w-56 p-4 bg-slate-50 dark:bg-slate-700/50 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase sticky left-0 z-20 border-b border-slate-100 dark:border-slate-700 backdrop-blur-md">
+                          Technician / Availability
+                        </th>
+                        {calendarDays.map(date => (
+                          <th key={date.toISOString()} className="p-4 bg-slate-50 dark:bg-slate-700/50 text-center border-l border-b border-slate-100 dark:border-slate-700 min-w-[120px]">
+                            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                            <div className="text-[10px] text-slate-400 uppercase">{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                      {technicians.map(tech => (
+                        <tr key={tech.id} className="group">
+                          <td className="p-4 bg-white dark:bg-slate-800 sticky left-0 z-10 border-r border-slate-100 dark:border-slate-700 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm ${
+                                tech.status === 'Available' ? 'bg-emerald-100 text-emerald-700' : 
+                                tech.status === 'Busy' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {tech.initials}
+                              </div>
+                              <div>
+                                <div className="text-sm font-bold text-slate-800 dark:text-white">{tech.name}</div>
+                                <div className="text-[10px] text-slate-400">{tech.role}</div>
+                              </div>
+                            </div>
+                            <div className="mt-2 text-[10px] font-medium px-2 py-0.5 rounded bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 inline-block">
+                              {tech.status}
+                            </div>
+                          </td>
+                          {calendarDays.map(date => {
+                            const dateStr = date.toISOString().split('T')[0];
+                            const dayTasks = tasks.filter(t => t.assignedTechId === tech.id && t.date === dateStr);
+                            const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+                            return (
+                              <td key={dateStr} className={`p-2 border-l border-slate-100 dark:border-slate-700 h-32 align-top relative transition-colors ${
+                                isToday ? 'bg-slate-50/50 dark:bg-slate-700/20' : ''
+                              } group-hover:bg-slate-50/50 dark:group-hover:bg-slate-700/10`}>
+                                {dayTasks.map(task => (
+                                  <div key={task.id} className={`mb-1.5 p-2 rounded-lg text-[10px] font-medium border shadow-sm transition-all hover:scale-[1.02] cursor-default ${
+                                    task.status === 'Completed' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-100 dark:border-emerald-800' :
+                                    task.priority === 'High' || task.priority === 'Critical' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-100 dark:border-orange-800' :
+                                    'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600'
+                                  }`}>
+                                    <div className="truncate font-bold mb-0.5" title={task.title}>{task.title}</div>
+                                    <div className="text-[9px] opacity-75 flex items-center gap-1">
+                                      <MapPin size={8} /> {task.location?.split(',')[0] || 'Site'}
+                                    </div>
+                                  </div>
+                                ))}
+                                {dayTasks.length === 0 && tech.status === 'On Leave' && (
+                                  <div className="absolute inset-0 m-2 rounded border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center">
+                                    <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest -rotate-12 select-none">On Leave</span>
+                                  </div>
+                                )}
+                                {dayTasks.length === 0 && tech.status !== 'On Leave' && (
+                                  <div className="opacity-0 group-hover:opacity-100 absolute bottom-2 right-2 transition-opacity">
+                                     <button 
+                                        onClick={() => handleOpenAddTask(tech.id, dateStr)}
+                                        className="p-1.5 bg-primary-50 hover:bg-primary-100 text-primary-600 rounded-lg shadow-sm transition-colors" 
+                                        title="Assign Task"
+                                     >
+                                       <Plus size={14} />
+                                     </button>
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Simple Add Task Modal within Calendar Context */}
+                  {isTaskModalOpen && (
+                    <div className="absolute inset-0 z-50 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in-up border border-slate-100 dark:border-slate-700">
+                            <div className="flex justify-between items-start mb-4">
+                                <h4 className="font-bold text-slate-800 dark:text-white">Assign Task</h4>
+                                <button onClick={() => setIsTaskModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                    <X size={18} />
+                                </button>
+                            </div>
+                            <form onSubmit={handleSubmitTask} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Task Title</label>
+                                    <input 
+                                        autoFocus
+                                        type="text"
+                                        value={taskForm.title}
+                                        onChange={(e) => setTaskForm({...taskForm, title: e.target.value})}
+                                        placeholder="e.g. Inspect Panel A"
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Priority</label>
+                                    <select
+                                        value={taskForm.priority}
+                                        onChange={(e) => setTaskForm({...taskForm, priority: e.target.value as TaskPriority})}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                                    >
+                                        <option value={TaskPriority.Low}>Low</option>
+                                        <option value={TaskPriority.Medium}>Medium</option>
+                                        <option value={TaskPriority.High}>High</option>
+                                        <option value={TaskPriority.Critical}>Critical</option>
+                                    </select>
+                                </div>
+                                <button 
+                                    type="submit" 
+                                    className="w-full bg-slate-900 hover:bg-black dark:bg-primary-600 dark:hover:bg-primary-700 text-white font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Plus size={16} /> Create Assignment
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           
@@ -669,7 +883,7 @@ const Settings: React.FC<SettingsProps> = ({ technicians, setTechnicians, settin
                               <label className="block text-xs font-bold text-slate-500 mb-1">Main Group</label>
                               <input 
                                 type="text"
-                                value={editingDevice.group}
+                                value={editingDevice.group || ''}
                                 onChange={(e) => setEditingDevice({...editingDevice, group: e.target.value})}
                                 className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm"
                               />
@@ -702,9 +916,8 @@ const Settings: React.FC<SettingsProps> = ({ technicians, setTechnicians, settin
                                  <thead className="bg-slate-50 dark:bg-slate-700 text-xs text-slate-500 uppercase">
                                     <tr>
                                        <th className="px-4 py-3 font-bold">Panel ID</th>
-                                       <th className="px-4 py-3 font-bold">Current Group</th>
+                                       <th className="px-4 py-3 font-bold">Group Assignment</th>
                                        <th className="px-4 py-3 font-bold">Status</th>
-                                       <th className="px-4 py-3 font-bold w-1/3">Edit Group Assignment</th>
                                     </tr>
                                  </thead>
                                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -712,22 +925,18 @@ const Settings: React.FC<SettingsProps> = ({ technicians, setTechnicians, settin
                                        <tr key={panel.id}>
                                           <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 font-bold">{panel.id}</td>
                                           <td className="px-4 py-3">
-                                             <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-xs font-medium">
-                                                {panel.group}
-                                             </span>
+                                             <input 
+                                               type="text"
+                                               value={panel.group || ''}
+                                               onChange={(e) => handlePanelGroupChange(panel.id, e.target.value)}
+                                               className="w-full px-2 py-1.5 rounded border border-slate-200 dark:bg-slate-900 dark:border-slate-600 dark:text-white text-xs focus:ring-2 focus:ring-primary-500 outline-none"
+                                               placeholder="Assign Group"
+                                             />
                                           </td>
                                           <td className="px-4 py-3">
                                              <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                                                 panel.status === 'Normal' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
                                              }`}>{panel.status}</span>
-                                          </td>
-                                          <td className="px-4 py-3">
-                                             <input 
-                                               type="text"
-                                               value={panel.group}
-                                               onChange={(e) => handlePanelGroupChange(panel.id, e.target.value)}
-                                               className="w-full px-2 py-1.5 rounded border border-slate-200 dark:bg-slate-900 dark:border-slate-600 dark:text-white text-xs"
-                                             />
                                           </td>
                                        </tr>
                                     ))}

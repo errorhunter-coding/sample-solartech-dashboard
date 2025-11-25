@@ -22,6 +22,7 @@ export interface PanelData {
   efficiency: number; // %
   status: 'Normal' | 'Low Efficiency' | 'Offline';
   history?: { time: string; power: number }[];
+  recentFaults?: IdentifiedFault[];
 }
 
 export interface ESP32Device {
